@@ -1,0 +1,50 @@
+<launch>
+    <param name="use_sim_time" value="false" />
+
+    <!-- Main node -->
+    <node name="orb_slam3" pkg="orb_slam3_ros" type="ros_mono" output="screen">
+        <!-- change the topics according to the dataset -->
+        <remap from="/camera/image_raw" to="/zed/zed_node/left/image_rect_color"/>
+        <remap from="/camera/image_and_mask" to="/detectron2_ros/maskImage"/>
+
+        <!-- Parameters for original ORB-SLAM3 -->
+        <param name="voc_file"      type="string" value="$(find orb_slam3_ros)/orb_slam3/Vocabulary/ORBvoc.txt.bin"/>
+        <param name="settings_file" type="string" value="$(find orb_slam3_ros)/config/Monocular/lasim.yaml"/>
+
+        <!-- Parameters for ROS -->
+        <param name="world_frame_id"    type="string"   value="world" />
+        <param name="cam_frame_id"      type="string"   value="camera" />
+        <param name="enable_pangolin"   type="bool"     value="true" />
+    </node>
+    
+    <!-- Trajectory path -->
+    <node pkg="hector_trajectory_server" type="hector_trajectory_server" name="trajectory_server_orb_slam3" output="screen" ns="orb_slam3_ros" >
+        <param name="/target_frame_name" value="/world" />
+        <param name="/source_frame_name" value="/camera" />
+        <param name="/trajectory_update_rate" value="20.0" />
+        <param name="/trajectory_publish_rate" value="20.0" />
+    </node>
+
+    <node pkg="rpg_open_remode" type="depthmap_node" name="remode" clear_params="true" output="screen">
+        <!-- change the topics according to the dataset -->
+        <remap from="/svo/dense_input" to="/orb_slam3/DenseInput"/>    
+        <param name="world_frame_id"    type="string"   value="/world" />
+        <param name="cam_frame_id"      type="string"   value="/camera" />
+        
+        <param name="cam_width" value="640" />
+        <param name="cam_height" value="360" />
+
+        <param name="cam_fx" value="261.1626892089844" />
+        <param name="cam_fy" value="261.1626892089844" />
+        <param name="cam_cx" value="326.9880676269531" />
+        <param name="cam_cy" value="184.5057220458984" />
+
+        <param name="ref_compl_perc" value="30.0" />
+        <param name="publish_conv_every_n" value="2" />
+        <param name="max_dist_from_ref" value="0.1" />
+    </node>   
+    <!-- Visualization -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find orb_slam3_ros)/config/orb_slam3_no_imu_extended.rviz" output="screen" />
+    
+    
+</launch>
