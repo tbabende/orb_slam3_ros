@@ -171,7 +171,7 @@ void ImageGrabber::SyncWithImu()
             mpImuGb->mBufMutex.unlock();
 
             // ORB-SLAM3 runs in TrackMonocular()
-            Sophus::SE3f Tcw = pSLAM->TrackMonocular(im, tIm, vImuMeas);
+            Sophus::SE3f Tcw = pSLAM->TrackMonocular(cv::Mat::ones(im.size(), CV_8UC1), im, tIm, vImuMeas);
             
             publish_topics(msg_time, Wbb);
         }

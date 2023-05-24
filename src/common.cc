@@ -5,17 +5,24 @@
 */
 
 #include "common.h"
+#include "DenseInput.h"
+#include "MaskImage.h"
 
 // Variables for ORB-SLAM3
 ORB_SLAM3::System* pSLAM;
 ORB_SLAM3::System::eSensor sensor_type = ORB_SLAM3::System::NOT_SET;
+//ORB_SLAM3::GeometricCamera* pCam = pSLAM->settings_->camera1();
+
 
 // Variables for ROS
 std::string world_frame_id, cam_frame_id, imu_frame_id;
-ros::Publisher pose_pub, odom_pub, kf_markers_pub;
+ros::Publisher pose_pub, dense_pub, odom_pub, kf_markers_pub;
 ros::Publisher tracked_mappoints_pub, all_mappoints_pub;
 image_transport::Publisher tracking_img_pub;
 
+double old_max;
+double old_min;
+bool init = false;
 //////////////////////////////////////////////////
 // Main functions
 //////////////////////////////////////////////////
@@ -65,6 +72,8 @@ void setup_publishers(ros::NodeHandle &node_handler, image_transport::ImageTrans
 {
     pose_pub = node_handler.advertise<geometry_msgs::PoseStamped>(node_name + "/camera_pose", 1);
 
+    dense_pub = node_handler.advertise<svo_msgs::DenseInput>(node_name + "/DenseInput", 1);
+
     tracked_mappoints_pub = node_handler.advertise<sensor_msgs::PointCloud2>(node_name + "/tracked_points", 1);
 
     all_mappoints_pub = node_handler.advertise<sensor_msgs::PointCloud2>(node_name + "/all_points", 1);
@@ -88,6 +97,7 @@ void publish_topics(ros::Time msg_time, Eigen::Vector3f Wbb)
     
     // Common topics
     publish_camera_pose(Twc, msg_time);
+    publish_dense_input(Twc, msg_time);
     publish_tf_transform(Twc, world_frame_id, cam_frame_id, msg_time);
 
     publish_tracking_img(pSLAM->GetCurrentFrame(), msg_time);
@@ -224,8 +234,64 @@ void publish_kf_markers(std::vector<Sophus::SE3f> vKFposes, ros::Time msg_time)
     }
     
     kf_markers_pub.publish(kf_markers);
-}
+}  
+ 
+void publish_dense_input(Sophus::SE3f Twc_SE3f, ros::Time msg_time)
+{
+    Sophus::SE3f twc = Twc_SE3f;
 
+    double min_z = std::numeric_limits<double>::max();  
+    double max_z = std::numeric_limits<double>::min();  
+    bool flag = pSLAM->mpTracker->mCurrentFrame.getSceneDepth(pSLAM->mpTracker->mCurrentFrame, max_z, min_z);
+    if(flag)
+    {
+        old_min = min_z;
+        old_max = max_z;
+        init = true;
+
+    }
+    if(init)
+    {
+        svo_msgs::DenseInput msg_dense;
+        msg_dense.header.stamp = msg_time;
+        msg_dense.header.frame_id = world_frame_id;
+
+        cv_bridge::CvImage img_msg;  
+        img_msg.header.stamp=msg_dense.header.stamp;  
+        img_msg.header.frame_id = cam_frame_id;  
+        img_msg.image = pSLAM->mpTracker->mImRGB;  
+
+        cv_bridge::CvImage mask_msg;  
+        mask_msg.header.stamp = msg_dense.header.stamp;  
+        mask_msg.header.frame_id = cam_frame_id;  
+        mask_msg.image = pSLAM->mpTracker->mImMask;  
+
+        if (img_msg.image.channels()==3 || img_msg.image.channels()==4)
+            img_msg.encoding = sensor_msgs::image_encodings::BGR8;
+        else
+            img_msg.encoding = sensor_msgs::image_encodings::MONO8;  
+        mask_msg.encoding = sensor_msgs::image_encodings::MONO8;
+        msg_dense.image = *img_msg.toImageMsg();
+        msg_dense.mask = *mask_msg.toImageMsg();
+        
+        msg_dense.min_depth = (float)old_min;
+        msg_dense.max_depth = (float)old_max;
+
+        msg_dense.min_depth = (float)old_min;
+        msg_dense.max_depth = (float)old_max;
+        msg_dense.pose.position.x = twc.translation().x();
+        msg_dense.pose.position.y = twc.translation().y();
+        msg_dense.pose.position.z = twc.translation().z();
+
+        msg_dense.pose.orientation.w = twc.unit_quaternion().coeffs().w();
+        msg_dense.pose.orientation.x = twc.unit_quaternion().coeffs().x();
+        msg_dense.pose.orientation.y = twc.unit_quaternion().coeffs().y();
+        msg_dense.pose.orientation.z = twc.unit_quaternion().coeffs().z();
+
+        dense_pub.publish(msg_dense); 
+    }
+}
+ 
 //////////////////////////////////////////////////
 // Miscellaneous functions
 //////////////////////////////////////////////////
@@ -275,9 +341,9 @@ sensor_msgs::PointCloud2 mappoint_to_pointcloud(std::vector<ORB_SLAM3::MapPoint*
             tf::Vector3 point_translation(P3Dw.x(), P3Dw.y(), P3Dw.z());
 
             float data_array[num_channels] = {
-                point_translation.x(),
-                point_translation.y(),
-                point_translation.z()
+                static_cast<float>(point_translation.x()),
+                static_cast<float>(point_translation.y()),
+                static_cast<float>(point_translation.z())
             };
 
             memcpy(cloud_data_ptr+(i*cloud.point_step), data_array, num_channels*sizeof(float));

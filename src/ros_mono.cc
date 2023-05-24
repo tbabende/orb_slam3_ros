@@ -6,7 +6,13 @@
 
 #include "common.h"
 
+#include "tf/transform_datatypes.h"
+#include "DenseInput.h"
+#include "MaskImage.h"
+
 using namespace std;
+
+
 
 class ImageGrabber
 {
@@ -14,6 +20,7 @@ public:
     ImageGrabber(){};
 
     void GrabImage(const sensor_msgs::ImageConstPtr& msg);
+    void GrabImageAndMask(const detectron2_ros::MaskImageConstPtr& msg);
 };
 
 int main(int argc, char **argv)
@@ -24,6 +31,8 @@ int main(int argc, char **argv)
     {
         ROS_WARN ("Arguments supplied via command line are ignored.");
     }
+
+
 
     std::string node_name = ros::this_node::getName();
 
@@ -52,7 +61,8 @@ int main(int argc, char **argv)
     pSLAM = new ORB_SLAM3::System(voc_file, settings_file, sensor_type, enable_pangolin);
     ImageGrabber igb;
 
-    ros::Subscriber sub_img = node_handler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage, &igb);
+    // ros::Subscriber sub_img = node_handler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage, &igb);
+    ros::Subscriber sub_img_and_mask = node_handler.subscribe("/camera/image_and_mask", 1, &ImageGrabber::GrabImageAndMask, &igb);
 
     setup_publishers(node_handler, image_transport, node_name);
     setup_services(node_handler, node_name);
@@ -73,10 +83,10 @@ int main(int argc, char **argv)
 void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
 {
     // Copy the ros image message to cv::Mat.
-    cv_bridge::CvImageConstPtr cv_ptr;
+    cv_bridge::CvImageConstPtr cv_ptr_im;
     try
     {
-        cv_ptr = cv_bridge::toCvShare(msg);
+        cv_ptr_im = cv_bridge::toCvShare(msg);
     }
     catch (cv_bridge::Exception& e)
     {
@@ -85,7 +95,30 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     }
 
     // ORB-SLAM3 runs in TrackMonocular()
-    Sophus::SE3f Tcw = pSLAM->TrackMonocular(cv_ptr->image, cv_ptr->header.stamp.toSec());
+    Sophus::SE3f Tcw = pSLAM->TrackMonocular(cv::Mat::ones(cv_ptr_im->image.size(), CV_8UC1), cv_ptr_im->image, msg->header.stamp.toSec());
+
+    ros::Time msg_time = msg->header.stamp;
+
+    publish_topics(msg_time);
+}
+
+void ImageGrabber::GrabImageAndMask(const detectron2_ros::MaskImageConstPtr& msg)
+{
+    cv_bridge::CvImageConstPtr cv_ptr_im;
+    cv_bridge::CvImageConstPtr cv_ptr_mask;
+    try
+    {
+        cv_ptr_im = cv_bridge::toCvShare(msg->image, msg);
+        cv_ptr_mask = cv_bridge::toCvShare(msg->mask, msg);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+        ROS_ERROR("cv_bridge exception: %s", e.what());
+        return;
+    }
+
+    // ORB-SLAM3 runs in TrackMonocular()
+    Sophus::SE3f Tcw = pSLAM->TrackMonocular(cv_ptr_mask->image, cv_ptr_im->image, msg->header.stamp.toSec());
 
     ros::Time msg_time = msg->header.stamp;
 
