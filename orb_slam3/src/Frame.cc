@@ -286,7 +286,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
 }
 
 
-Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, GeometricCamera* pCamera, cv::Mat &distCoef, const float &bf, const float &thDepth, Frame* pPrevF, const IMU::Calib &ImuCalib)
+Frame::Frame(const cv::Mat &imMask, const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, GeometricCamera* pCamera, cv::Mat &distCoef, const float &bf, const float &thDepth, Frame* pPrevF, const IMU::Calib &ImuCalib)
     :mpcpi(NULL),mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
      mTimeStamp(timeStamp), mK(static_cast<Pinhole*>(pCamera)->toK()), mK_(static_cast<Pinhole*>(pCamera)->toK_()), mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth),
      mImuCalib(ImuCalib), mpImuPreintegrated(NULL),mpPrevFrame(pPrevF),mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbIsSet(false), mbImuPreintegrated(false), mpCamera(pCamera),
@@ -315,7 +315,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     mTimeORB_Ext = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndExtORB - time_StartExtORB).count();
 #endif
 
-
+    RemoveMaskedKeypoints(imMask, mvKeys, mDescriptors);
     N = mvKeys.size();
     if(mvKeys.empty())
         return;
@@ -1244,5 +1244,74 @@ bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight)
 Eigen::Vector3f Frame::UnprojectStereoFishEye(const int &i){
     return mRwc * mvStereo3Dpoints[i] + mOw;
 }
+
+bool Frame::getSceneDepth(Frame& frame, double& depth_max, double& depth_min){
+  vector<double> depth_vec;
+  depth_vec.reserve(frame.mvpMapPoints.size());
+  depth_min = std::numeric_limits<double>::max();
+  for(auto it=frame.mvpMapPoints.begin(), ite=frame.mvpMapPoints.end(); it!=ite; ++it)
+  {
+    if((*it)!= NULL)
+    {
+      if((*it)->isBad())
+        continue;
+      //std::cout << "Mat: " << mpPos.at<float>(0) << " " << mpPos.at<float>(1) << " " << mpPos.at<float>(2) << std::endl;
+      Eigen::Vector3f pcw = (*it)->GetWorldPos();
+      Sophus::SE3f twc = frame.GetPose().inverse();
+      Eigen::Vector3f pwc = twc*pcw;
+     
+
+      const double z = pwc[2];
+      if (z > 0)
+      {
+        depth_vec.push_back(z);
+        // std::cout << "Mat: " << v3Temp << std::endl;
+        // std::cout << "at: " << v3Temp.at<float>(2) << std::endl;
+        // std::cout << "Z: " << z << std::endl;
+        depth_min = fmin(z, depth_min);
+        depth_max = fmax(z, depth_max);
+      }
+    }
+  }
+  if(depth_vec.empty())
+  {
+    //SLAM_WARN_STREAM("Cannot set scene depth. Frame has no point-observations!");
+    return false;
+  }
+  // std::cout << "Min: " << depth_min << std::endl;
+  // // depth_max = *std::max_element(depth_vec.begin(),depth_vec.end());
+  // std::cout << "Max: " << depth_max << std::endl;
+  return true;
+}
+
+void Frame::RemoveMaskedKeypoints(const cv::Mat &imMask, std::vector<cv::KeyPoint> &mvKeys, cv::Mat &mDescriptors){
+
+    cv::Mat Mask_dil = imMask.clone();
+    int dilation_size = 15;
+    cv::Mat kernel = getStructuringElement(cv::MORPH_ELLIPSE,
+                                        cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+                                        cv::Point( dilation_size, dilation_size ) );
+    cv::erode(imMask, Mask_dil, kernel);
+
+    if(mvKeys.empty())
+        return;
+
+    std::vector<cv::KeyPoint> _mvKeys;
+    cv::Mat _mDescriptors;
+
+    for (size_t i(0); i < mvKeys.size(); ++i)
+    {
+        int val = (int)Mask_dil.at<uchar>(mvKeys[i].pt.y,mvKeys[i].pt.x);
+        if (val == 1)
+        {
+            _mvKeys.push_back(mvKeys[i]);
+            _mDescriptors.push_back(mDescriptors.row(i));
+        }
+    }
+
+    mvKeys = _mvKeys;
+    mDescriptors = _mDescriptors;
+}
+
 
 } //namespace ORB_SLAM
