@@ -54,6 +54,8 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf2
   message_generation
+  svo_msgs
+  detectron2_ros
 )
 
 find_package(Eigen3 3.1.0 REQUIRED)
@@ -70,7 +72,7 @@ generate_messages(
 )
 
 catkin_package (
-  CATKIN_DEPENDS roscpp rospy std_msgs cv_bridge image_transport tf sensor_msgs dynamic_reconfigure message_runtime
+  CATKIN_DEPENDS roscpp rospy std_msgs cv_bridge image_transport tf sensor_msgs dynamic_reconfigure message_runtime svo_msgs detectron2_ros
   LIBRARIES {PROJECT_NAME} libDBoW2 libg2o
 )
 

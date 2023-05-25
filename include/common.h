@@ -29,6 +29,8 @@
 
 #include <orb_slam3_ros/SaveMap.h> // This file is created automatically, see here http://wiki.ros.org/ROS/Tutorials/CreatingMsgAndSrv#Creating_a_srv
 
+#include "svo_msgs/DenseInput.h"
+#include "detectron2_ros/MaskImage.h"
 // ORB-SLAM3-specific libraries
 #include "System.h"
 #include "ImuTypes.h"

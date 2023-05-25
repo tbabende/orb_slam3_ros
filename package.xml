@@ -22,6 +22,8 @@
   <build_depend>tf2_ros</build_depend>
   <build_depend>dynamic_reconfigure</build_depend>
   <build_depend>message_generation</build_depend>
+  <build_depend>svo_msgs</build_depend>
+  <build_depend>detectron2_ros</build_depend>
 
   <run_depend>roscpp</run_depend>
   <run_depend>rospy</run_depend>
@@ -35,6 +37,8 @@
   <run_depend>tf2_ros</run_depend>
   <run_depend>dynamic_reconfigure</run_depend>
   <run_depend>message_runtime</run_depend>
+  <run_depend>svo_msgs</run_depend>
+  <run_depend>detectron2_ros</run_depend>
   <export>
 
   </export>

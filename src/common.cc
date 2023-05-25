@@ -5,8 +5,6 @@
 */
 
 #include "common.h"
-#include "DenseInput.h"
-#include "MaskImage.h"
 
 // Variables for ORB-SLAM3
 ORB_SLAM3::System* pSLAM;
